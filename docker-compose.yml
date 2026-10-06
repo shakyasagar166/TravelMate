@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  mysql-db:
+    image: mysql:8.0
+    container_name: travelmate-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: travelmate_db
+      MYSQL_USER: travelmate_user
+      MYSQL_PASSWORD: travelmate_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_travel_data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./database/sample-data.sql:/docker-entrypoint-initdb.d/02-sample-data.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "travelmate_user", "-ptravelmate_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: travelmate-backend
+    restart: always
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-db:3306/travelmate_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: travelmate_user
+      SPRING_DATASOURCE_PASSWORD: travelmate_password
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      JWT_SECRET: 6250645367566B5970404E635266556A586E3272357538782F413F4428472B4B
+    ports:
+      - "8080:8080"
+    networks:
+      - travelmate-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: travelmate-frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    networks:
+      - travelmate-network
+
+networks:
+  travelmate-network:
+    driver: bridge
+
+volumes:
+  mysql_travel_data:
